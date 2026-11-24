@@ -80,6 +80,11 @@
           </div>
         </div>
 
+        <div class="card income-card" id="income-card" hidden>
+          <div class="chart-head"><h3>Rincian pemasukan</h3><p class="muted small">per sumber</p></div>
+          <div id="income-list"></div>
+        </div>
+
         <h2 class="section-title">Insight</h2>
         <div class="insight-grid" id="insights"></div>
 
@@ -127,6 +132,14 @@
 
         <div class="card chart-card">
           <div class="chart-head">
+            <h3>Pemasukan per sumber</h3>
+            <p class="muted small" id="inc-total"></p>
+          </div>
+          <div id="chart-inc"></div>
+        </div>
+
+        <div class="card chart-card">
+          <div class="chart-head">
             <h3 id="trend-title">Tren pengeluaran</h3>
             <p class="muted small" id="trend-sub"></p>
           </div>
@@ -168,7 +181,7 @@
           <p class="muted small">Kunci rahasia hanya tersimpan di HP ini. Jika HP hilang, jalankan fungsi <b>gantiKunci</b> di Apps Script agar kunci lama tidak berlaku.</p>
           <button class="btn btn-danger-ghost" id="set-logout">Putuskan koneksi dari HP ini</button>
         </div>
-        <p class="version muted small">DompetKu v1.0</p>
+        <p class="version muted small">DompetKu v1.1</p>
       </section>
     </main>
 
@@ -220,6 +233,7 @@
         <input id="tx-amount" inputmode="numeric" pattern="[0-9.]*" autocomplete="off" placeholder="0" aria-label="Nominal" />
       </label>
       <p class="form-error" id="err-amount"></p>
+      <p class="amount-hint" id="amount-hint"></p>
       <div class="quick-amounts" id="quick-amounts"></div>
 
       <p class="field-label">Kategori</p>

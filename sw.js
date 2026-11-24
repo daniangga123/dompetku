@@ -1,7 +1,7 @@
 /* DompetKu — Service Worker
    Menyimpan tampilan aplikasi di HP agar terbuka instan.
    Data keuangan TIDAK disimpan di sini (permintaan ke Apps Script selalu langsung). */
-const CACHE = 'dompetku-v1';
+const CACHE = 'dompetku-v1.1';
 const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 self.addEventListener('install', e => {

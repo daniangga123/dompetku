@@ -47,6 +47,8 @@ const fmtDayLong = s => {
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 const ICONS = [
+  [/sppd|perjalanan dinas|dinas luar/i, '🧳'], [/\btpp\b|tambahan penghasilan|uang makan/i, '🏅'],
+  [/gaji|fungsional/i, '💼'],
   [/makan|minum|kuliner|jajan|kopi|resto/i, '🍜'], [/transport|bensin|bbm|ojek|parkir|tol|kendaraan/i, '🚗'],
   [/belanja|groceries|dapur|sembako/i, '🛒'], [/tagihan|listrik|\bair\b|utilitas|pln|pdam/i, '💡'],
   [/pulsa|internet|wifi|kuota/i, '📶'], [/sehat|obat|dokter|medis|bpjs/i, '💊'],
@@ -230,6 +232,8 @@ function renderDashboard() {
   $('#sum-net').textContent = rp(inc - exp);
   $('#sum-range').textContent = rangeLabel(r);
 
+  renderIncomeBreakdown(tx.filter(t => t.type === 'pemasukan'), inc);
+
   // ---- Insight
   const expTx = tx.filter(t => t.type === 'pengeluaran');
   const byCat = groupSum(expTx);
@@ -277,6 +281,31 @@ function renderDashboard() {
   $('#recent-list').innerHTML = recent.length
     ? recent.map(txHtml).join('')
     : emptyHtml('🪙', 'Belum ada transaksi', 'Ketuk tombol + di bawah untuk mencatat transaksi pertamamu.', true);
+}
+
+/* Rincian pemasukan per sumber (Gaji, TPP, SPPD, ...) */
+function renderIncomeBreakdown(incTx, inc) {
+  const cats = (state.data.kategori.pemasukan || []).slice();
+  const sums = new Map(groupSum(incTx).map(x => [x.name, x.total]));
+  const counts = new Map();
+  incTx.forEach(t => counts.set(t.category, (counts.get(t.category) || 0) + 1));
+  // Kategori di luar daftar (mis. ketik manual di sheet) tetap ditampilkan
+  sums.forEach((v, k) => { if (!cats.includes(k)) cats.push(k); });
+  const rows = cats
+    .filter(c => sums.get(c) || !/^lain/i.test(c))   // "Lainnya" hanya tampil jika ada isinya
+    .map(c => ({ name: c, total: sums.get(c) || 0, n: counts.get(c) || 0 }));
+  if (!rows.length) { $('#income-card').hidden = true; return; }
+  $('#income-card').hidden = false;
+  $('#income-list').innerHTML = rows.map(r => `
+    <div class="inc-row ${r.total ? '' : 'inc-empty'}">
+      <span class="tx-ico in" aria-hidden="true">${iconOf(r.name)}</span>
+      <div class="inc-main">
+        <p class="inc-name">${esc(r.name)}</p>
+        <p class="inc-sub">${r.total ? `${r.n}× · ${Math.round(r.total / inc * 100)}% dari pemasukan` : 'Belum diterima di periode ini'}</p>
+        <div class="bar-track"><div class="bar-fill bar-in" style="width:${inc ? Math.max(r.total ? 2 : 0, r.total / inc * 100) : 0}%"></div></div>
+      </div>
+      <span class="inc-val">${r.total ? rp(r.total) : '—'}</span>
+    </div>`).join('');
 }
 
 function groupSum(list) {
@@ -370,6 +399,7 @@ function renderAnalysis() {
   const r = periodRange();
   const expTx = state.data.pengeluaran.filter(t => inRange(t, r));
   renderCategoryChart(expTx);
+  renderIncomeChart(state.data.pemasukan.filter(t => inRange(t, r)));
   renderTrendChart(r);
   renderCompareChart(r);
 }
@@ -396,6 +426,31 @@ function renderCategoryChart(expTx) {
       </div>
       <span class="bar-val">${rp(x.total)}</span>
     </div>`).join('');
+}
+
+function renderIncomeChart(incTx) {
+  const total = sumOf(incTx);
+  $('#inc-total').textContent = total ? `Total ${rp(total)}` : '';
+  const rows = groupSum(incTx);
+  if (!rows.length) {
+    $('#chart-inc').innerHTML = emptyHtml('💼', 'Belum ada pemasukan', 'Belum ada pemasukan di periode ini.');
+    return;
+  }
+  const counts = new Map();
+  incTx.forEach(t => counts.set(t.category, (counts.get(t.category) || 0) + 1));
+  const max = rows[0].total;
+  $('#chart-inc').innerHTML = rows.map((x, i) => {
+    const n = counts.get(x.name);
+    return `<div class="bar-row">
+      <span class="bar-ico" aria-hidden="true">${iconOf(x.name)}</span>
+      <div>
+        <p class="bar-name">${esc(x.name)} <span>${Math.round(x.total / total * 100)}%</span></p>
+        <div class="bar-track"><div class="bar-fill bar-in" style="width:${Math.max(2, x.total / max * 100)}%;animation-delay:${i * 40}ms"></div></div>
+        <p class="bar-note">${n}× diterima${n > 1 ? ` · rata-rata ${rp(x.total / n)}` : ''}</p>
+      </div>
+      <span class="bar-val">${rp(x.total)}</span>
+    </div>`;
+  }).join('');
 }
 
 function renderTrendChart(r) {
@@ -578,6 +633,8 @@ function sortedCats(type) {
   const list = base.slice();
   if (state.form.cat && !list.includes(state.form.cat)) list.push(state.form.cat);
   // Kategori yang sering dipakai tampil duluan; "Lainnya" selalu di akhir
+  // Pemasukan mengikuti urutan di sheet Kategori (Gaji, TPP, SPPD); pengeluaran diurutkan dari yang paling sering
+  if (type === 'pemasukan') return list;
   return list.map((c, i) => ({ c, i, f: freq.get(c) || 0 }))
     .sort((a, b) => (/^lain/i.test(a.c) - /^lain/i.test(b.c)) || (b.f - a.f) || (a.i - b.i))
     .map(x => x.c);
@@ -612,6 +669,7 @@ function openForm(tx) {
   $('#tx-save .btn-label').textContent = tx ? 'Simpan perubahan' : 'Simpan';
   $('#tx-delete').hidden = !tx;
   setAmount(tx ? tx.amount : 0);
+  f.autoFilled = false; $('#amount-hint').textContent = '';
   $('#tx-note').value = tx ? tx.note : '';
   clearErrors();
   renderFormType(); renderFormDate();
@@ -639,6 +697,7 @@ function clearErrors() {
 }
 
 amountInput.addEventListener('input', () => {
+  state.form.autoFilled = false; $('#amount-hint').textContent = '';
   const digits = amountInput.value.replace(/\D/g, '').replace(/^0+/, '').slice(0, 13);
   amountInput.value = digits ? NF.format(Number(digits)) : '';
   if (digits) { $('#err-amount').textContent = ''; $('#amount-field').classList.remove('invalid'); }
@@ -647,11 +706,27 @@ amountInput.addEventListener('input', () => {
 $('#tx-type').addEventListener('click', e => {
   const b = e.target.closest('.tt'); if (!b || b.dataset.v === state.form.type) return;
   state.form.type = b.dataset.v; state.form.cat = '';
+  if (state.form.autoFilled) { setAmount(0); state.form.autoFilled = false; }
+  $('#amount-hint').textContent = '';
   renderFormType();
 });
+function lastAmountOf(type, cat) {
+  const list = (state.data ? state.data[type] : []).filter(t => t.category === cat).sort(byNewest);
+  return list.length ? list[0].amount : 0;
+}
+
 $('#tx-cats').addEventListener('click', e => {
   const b = e.target.closest('.cat'); if (!b) return;
   state.form.cat = b.dataset.cat;
+  // Pemasukan rutin (gaji, TPP, SPPD): isi nominal terakhir bila nominal kosong/masih hasil isi otomatis
+  const f = state.form;
+  if (f.type === 'pemasukan' && f.mode === 'add' && (!getAmount() || f.autoFilled)) {
+    const last = lastAmountOf('pemasukan', f.cat);
+    if (last) {
+      setAmount(last); f.autoFilled = true; clearErrors();
+      $('#amount-hint').textContent = 'Diisi dari pencatatan terakhir. Ubah jika jumlahnya berbeda.';
+    } else if (f.autoFilled) { setAmount(0); f.autoFilled = false; $('#amount-hint').textContent = ''; }
+  }
   $$('#tx-cats .cat').forEach(c => c.classList.toggle('active', c === b));
   $('#err-cat').textContent = '';
 });
