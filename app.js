@@ -69,11 +69,36 @@ const state = {
   syncing: false,
   view: 'beranda',
   period: { preset: 'bulan', from: '', to: '' },
-  hist: { q: '', type: 'semua', cat: '', from: '', to: '', limit: 60 },
-  form: { mode: 'add', type: 'pengeluaran', cat: '', date: today(), id: null, oldType: null }
+  hist: { q: '', type: 'semua', cat: '', acc: '', from: '', to: '', limit: 60 },
+  form: { mode: 'add', type: 'pengeluaran', cat: '', date: today(), id: null, oldType: null, account: '', toAccount: '' }
 };
 
 const allTx = () => state.data ? state.data.pemasukan.concat(state.data.pengeluaran) : [];
+const transfers = () => (state.data && state.data.transfer) || [];
+const accounts = () => (state.data && state.data.rekening) || [];
+const hasAccounts = () => accounts().length > 0;
+const allMoves = () => allTx().concat(transfers());
+const listOf = type => state.data[type] || (state.data[type] = []);
+const LAST_ACC = 'dk_lastacc';
+
+/* Saldo tiap rekening = Saldo Awal + pemasukan − pengeluaran + transfer masuk − transfer keluar */
+function accountStats() {
+  const mStart = today().slice(0, 8) + '01';
+  const m = new Map(accounts().map(a => [a.name, Object.assign({}, a, { balance: a.opening || 0, inM: 0, outM: 0 })]));
+  const add = (name, v, date) => {
+    const a = m.get(name); if (!a) return;
+    a.balance += v;
+    if (date >= mStart) { if (v > 0) a.inM += v; else a.outM -= v; }
+  };
+  if (state.data) {
+    state.data.pemasukan.forEach(t => add(t.account, t.amount, t.date));
+    state.data.pengeluaran.forEach(t => add(t.account, -t.amount, t.date));
+    transfers().forEach(t => { add(t.from, -t.amount, t.date); add(t.to, t.amount, t.date); });
+  }
+  return Array.from(m.values());
+}
+const ACC_ICONS = [[/haji/i, '🕋'], [/umro|umra/i, '🕌'], [/darurat/i, '🛟'], [/gaji/i, '💼'], [/harian/i, '👛'], [/tabung/i, '🐷']];
+const accIcon = n => (ACC_ICONS.find(([r]) => r.test(n || '')) || [0, '🏦'])[1];
 const byNewest = (a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : (b.createdAt || 0) - (a.createdAt || 0));
 const inRange = (t, r) => t.date >= r.from && t.date <= r.to;
 const sumOf = list => list.reduce((s, t) => s + (Number(t.amount) || 0), 0);
@@ -118,7 +143,7 @@ async function sync({ silent = false } = {}) {
     renderAll();
     if (!silent) toast('Data diperbarui', 'ok');
   } catch (e) {
-    if (!state.data) { state.data = { pemasukan: [], pengeluaran: [], kategori: { pemasukan: [], pengeluaran: [] } }; renderAll(); }
+    if (!state.data) { state.data = { pemasukan: [], pengeluaran: [], transfer: [], rekening: [], kategori: { pemasukan: [], pengeluaran: [] } }; renderAll(); }
     toast(e.message, 'err', { label: 'Coba lagi', fn: () => sync() });
   } finally {
     state.syncing = false;
@@ -201,8 +226,15 @@ document.addEventListener('change', e => {
    Render: Beranda
    ========================================================= */
 function txHtml(t) {
+  if (t.type === 'transfer') {
+    return `<button class="tx" data-id="${esc(t.id)}" data-type="transfer">
+      <span class="tx-ico tr" aria-hidden="true">🔁</span>
+      <span class="tx-main"><span class="tx-cat">Transfer${t.note ? ' · ' + esc(t.note) : ''}</span><span class="tx-note">${esc(t.from)} → ${esc(t.to)}</span></span>
+      <span class="tx-amt tr">${rp(t.amount)}</span>
+    </button>`;
+  }
   const isIn = t.type === 'pemasukan';
-  const sub = t.note ? esc(t.note) : fmtDayLong(t.date);
+  const sub = [t.note, t.account].filter(Boolean).map(esc).join(' · ') || fmtDayLong(t.date);
   return `<button class="tx" data-id="${esc(t.id)}" data-type="${t.type}">
     <span class="tx-ico ${isIn ? 'in' : 'out'}" aria-hidden="true">${iconOf(t.category)}</span>
     <span class="tx-main"><span class="tx-cat">${esc(t.category)}</span><span class="tx-note">${sub}</span></span>
@@ -277,10 +309,24 @@ function renderDashboard() {
     </div>`;
 
   // ---- Terbaru
-  const recent = allTx().sort(byNewest).slice(0, 6);
+  renderBalanceStrip();
+  const recent = allMoves().sort(byNewest).slice(0, 6);
   $('#recent-list').innerHTML = recent.length
     ? recent.map(txHtml).join('')
     : emptyHtml('🪙', 'Belum ada transaksi', 'Ketuk tombol + di bawah untuk mencatat transaksi pertamamu.', true);
+}
+
+function renderBalanceStrip() {
+  const el = $('#balance-strip');
+  if (!hasAccounts()) { el.hidden = true; return; }
+  const st = accountStats();
+  const free = sumOf(st.filter(a => !a.locked).map(a => ({ amount: a.balance })));
+  const locked = sumOf(st.filter(a => a.locked).map(a => ({ amount: a.balance })));
+  el.hidden = false;
+  el.innerHTML = `<span class="bs-ico">🏦</span>
+    <span class="bs-main"><span class="bs-label">Saldo bisa dipakai · ${st.filter(a => !a.locked).length} rekening</span>
+    <span class="bs-val">${rp(free)}</span>${locked ? `<span class="bs-sub">🔒 ${rp(locked)} terkunci</span>` : ''}</span>
+    <span class="bs-go">›</span>`;
 }
 
 /* Rincian pemasukan per sumber (Gaji, TPP, SPPD, ...) */
@@ -318,6 +364,9 @@ function groupSum(list) {
    Render: Riwayat
    ========================================================= */
 function renderHistoryFilters() {
+  const accSel = $('#h-acc');
+  accSel.closest('label').hidden = !hasAccounts();
+  accSel.innerHTML = '<option value="">Semua rekening</option>' + accounts().map(a => `<option ${a.name === state.hist.acc ? 'selected' : ''}>${esc(a.name)}</option>`).join('');
   const sel = $('#h-cat');
   const cats = Array.from(new Set(allTx().map(t => t.category)
     .concat(state.data ? state.data.kategori.pengeluaran.concat(state.data.kategori.pemasukan) : []))).sort((a, b) => a.localeCompare(b, 'id'));
@@ -329,20 +378,26 @@ function renderHistory() {
   const h = state.hist;
   const q = h.q.trim().toLowerCase();
   const qNum = q.replace(/[^\d]/g, '');
-  let list = allTx().filter(t =>
-    (h.type === 'semua' || t.type === h.type) &&
-    (!h.cat || t.category === h.cat) &&
-    (!h.from || t.date >= h.from) && (!h.to || t.date <= h.to) &&
-    (!q || t.category.toLowerCase().includes(q) || (t.note || '').toLowerCase().includes(q) || (qNum && String(Math.round(t.amount)).includes(qNum)))
-  ).sort(byNewest);
+  let list = allMoves().filter(t => {
+    if (h.type !== 'semua' && t.type !== h.type) return false;
+    if (h.cat && t.category !== h.cat) return false;
+    if (h.acc && !(t.account === h.acc || t.from === h.acc || t.to === h.acc)) return false;
+    if ((h.from && t.date < h.from) || (h.to && t.date > h.to)) return false;
+    if (q) {
+      const hay = [t.category, t.note, t.account, t.from, t.to, t.type === 'transfer' ? 'transfer' : ''].filter(Boolean).join(' ').toLowerCase();
+      if (!(hay.includes(q) || (qNum && String(Math.round(t.amount)).includes(qNum)))) return false;
+    }
+    return true;
+  }).sort(byNewest);
 
   const total = list.length;
   const inc = sumOf(list.filter(t => t.type === 'pemasukan'));
   const exp = sumOf(list.filter(t => t.type === 'pengeluaran'));
-  $('#h-meta').textContent = total ? `${total} transaksi · masuk ${rp(inc)} · keluar ${rp(exp)}` : '';
+  const trN = list.filter(t => t.type === 'transfer').length;
+  $('#h-meta').textContent = !total ? '' : [`${total} transaksi`, inc ? `masuk ${rp(inc)}` : '', exp ? `keluar ${rp(exp)}` : '', trN ? `${trN} transfer` : ''].filter(Boolean).join(' · ');
 
   if (!total) {
-    const filtered = q || h.cat || h.from || h.to || h.type !== 'semua';
+    const filtered = q || h.cat || h.acc || h.from || h.to || h.type !== 'semua';
     $('#history-list').innerHTML = `<div class="card">${filtered
       ? emptyHtml('🔍', 'Tidak ditemukan', 'Tidak ada transaksi yang cocok. Coba ubah kata kunci atau filter.')
       : emptyHtml('🧾', 'Riwayat masih kosong', 'Transaksi yang kamu catat akan muncul di sini.', true)}</div>`;
@@ -375,6 +430,7 @@ $('#h-type').addEventListener('click', e => {
   state.hist.type = b.dataset.v; state.hist.limit = 60; renderHistory();
 });
 $('#h-cat').addEventListener('change', e => { state.hist.cat = e.target.value; renderHistory(); });
+$('#h-acc').addEventListener('change', e => { state.hist.acc = e.target.value; renderHistory(); });
 $('#h-from').addEventListener('change', e => { state.hist.from = e.target.value; renderHistory(); });
 $('#h-to').addEventListener('change', e => { state.hist.to = e.target.value; renderHistory(); });
 $('#h-more').addEventListener('click', () => { state.hist.limit += 60; renderHistory(); });
@@ -589,6 +645,56 @@ function attachHover(box, W, pick) {
 }
 
 /* =========================================================
+   Rekening
+   ========================================================= */
+function renderAccounts() {
+  if (!state.data) return;
+  const warn = $('#acc-warning');
+  if (!('rekening' in state.data)) {
+    warn.innerHTML = `<div class="card notice">⚠️ Fitur rekening membutuhkan <b>Code.gs v2.0</b>. Ikuti langkah <b>Pembaruan v2.0</b> di panduan, lalu ketuk ↻.</div>`;
+  } else warn.innerHTML = '';
+  const st = accountStats();
+  const free = st.filter(a => !a.locked), locked = st.filter(a => a.locked);
+  const tot = list => sumOf(list.map(a => ({ amount: a.balance })));
+  $('#acc-total').textContent = rp(tot(st));
+  $('#acc-free').textContent = rp(tot(free));
+  $('#acc-locked').textContent = rp(tot(locked));
+  $('#acc-count').textContent = st.length ? `${st.length} rekening` : '';
+
+  if (!st.length) {
+    $('#acc-list').innerHTML = `<div class="card">${emptyHtml('🏦', 'Belum ada rekening', 'Tambahkan rekeningmu di sheet "Rekening" pada spreadsheet, isi Saldo Awal, lalu ketuk ↻.')}</div>`;
+  } else {
+    $('#acc-list').innerHTML = st.map(a => {
+      const pct = a.target ? Math.min(100, Math.max(0, a.balance / a.target * 100)) : 0;
+      return `<button class="acc-card ${a.locked ? 'locked' : ''}" data-acc-open="${esc(a.name)}">
+        <div class="acc-top">
+          <span class="acc-badge" aria-hidden="true">${accIcon(a.name + ' ' + a.note)}</span>
+          <span class="acc-id"><span class="acc-name">${esc(a.name)}</span><span class="acc-note">${a.locked ? '🔒 Terkunci · ' : ''}${esc(a.note || '')}</span></span>
+          <span class="acc-bal ${a.balance < 0 ? 'neg' : ''}">${rp(a.balance)}</span>
+        </div>
+        ${a.target ? `<div class="acc-target">
+          <div class="bar-track"><div class="bar-fill" style="width:${Math.max(pct ? 2 : 0, pct)}%"></div></div>
+          <span>${Math.floor(pct)}% dari target ${rp(a.target)}${a.balance < a.target ? ` · kurang ${rp(a.target - a.balance)}` : ' · tercapai 🎉'}</span>
+        </div>` : ''}
+        ${(a.inM || a.outM) ? `<span class="acc-flow">Bulan ini: ${[a.inM ? `<b class="in">+${rp(a.inM)}</b> masuk` : '', a.outM ? `<b>−${rp(a.outM)}</b> keluar` : ''].filter(Boolean).join(' · ')}</span>` : ''}
+      </button>`;
+    }).join('');
+  }
+  // Transaksi lama yang belum punya rekening
+  const orphan = st.length ? allTx().filter(t => !t.account).length : 0;
+  $('#acc-orphan').hidden = !orphan;
+  $('#acc-orphan').innerHTML = orphan ? `ℹ️ ${orphan} transaksi lama tidak memiliki rekening, jadi tidak dihitung di saldo. Ini wajar kalau Saldo Awal di sheet Rekening sudah diisi dengan saldo bank terbaru.` : '';
+}
+document.addEventListener('click', e => {
+  const c = e.target.closest('[data-acc-open]');
+  if (!c) return;
+  state.hist = Object.assign(state.hist, { acc: c.dataset.accOpen, type: 'semua', cat: '', q: '', limit: 60 });
+  $('#h-search').value = '';
+  $$('#h-type .seg').forEach(s => s.classList.toggle('active', s.dataset.v === 'semua'));
+  go('riwayat');
+});
+
+/* =========================================================
    Setelan
    ========================================================= */
 function renderSettings() {
@@ -622,7 +728,39 @@ $('#set-logout').addEventListener('click', () => {
 /* =========================================================
    Form tambah / edit transaksi
    ========================================================= */
-const QUICK = { pengeluaran: [10000, 20000, 50000, 100000, 250000], pemasukan: [100000, 500000, 1000000, 5000000] };
+const QUICK = { pengeluaran: [10000, 20000, 50000, 100000, 250000], pemasukan: [100000, 500000, 1000000, 5000000], transfer: [500000, 1000000, 2000000, 5000000] };
+
+// Rekening yang boleh dipilih: rekening terkunci hanya bisa menerima dana
+function usableAccounts(dir) { return accounts().filter(a => dir === 'in' || !a.locked); }
+function defaultAccount(kind) {
+  const dir = kind === 'pemasukan' || kind === 'transferTo' ? 'in' : 'out';
+  const accs = usableAccounts(dir);
+  const last = store.get(LAST_ACC, {})[kind];
+  if (last && accs.some(a => a.name === last)) return last;
+  if (kind === 'transferTo') return '';
+  const re = kind === 'pengeluaran' ? /harian/i : /gaji/i;
+  const hit = accs.find(a => re.test(a.name + ' ' + a.note));
+  return hit ? hit.name : (accs[0] ? accs[0].name : '');
+}
+function accChips(sel, dir, exclude) {
+  const bal = new Map(accountStats().map(a => [a.name, a.balance]));
+  const list = usableAccounts(dir).filter(a => a.name !== exclude);
+  return list.map(a => `<button type="button" class="acc-chip ${a.name === sel ? 'active' : ''}" data-acc="${esc(a.name)}">
+      <span class="ac-ico" aria-hidden="true">${accIcon(a.name + ' ' + a.note)}</span>
+      <span class="ac-txt"><b>${a.locked ? '🔒 ' : ''}${esc(a.name)}</b><small>${rp(bal.get(a.name) || 0)}</small></span>
+    </button>`).join('') || '<p class="muted small">Tidak ada rekening yang bisa dipilih.</p>';
+}
+function renderFormAccounts() {
+  const f = state.form;
+  const show = hasAccounts();
+  $('#acc-block').hidden = !show;
+  if (!show) return;
+  const isTr = f.type === 'transfer';
+  $('#acc-label').textContent = isTr ? 'Dari rekening' : f.type === 'pemasukan' ? 'Masuk ke rekening' : 'Dibayar dari rekening';
+  $('#tx-acc').innerHTML = accChips(f.account, f.type === 'pemasukan' ? 'in' : 'out');
+  $('#acc-to-wrap').hidden = !isTr;
+  if (isTr) $('#tx-acc-to').innerHTML = accChips(f.toAccount, 'in', f.account);
+}
 const amountInput = $('#tx-amount');
 
 function sortedCats(type) {
@@ -643,7 +781,19 @@ function sortedCats(type) {
 function renderFormType() {
   const f = state.form;
   $('#tx-type').dataset.v = f.type;
-  $$('#tx-type .tt').forEach(b => b.classList.toggle('active', b.dataset.v === f.type));
+  $('#tx-type').classList.toggle('three', hasAccounts());
+  $$('#tx-type .tt').forEach(b => {
+    b.classList.toggle('active', b.dataset.v === f.type);
+    // Saat edit: transfer tidak bisa diubah jadi pemasukan/pengeluaran (dan sebaliknya)
+    b.disabled = f.mode === 'edit' && ((b.dataset.v === 'transfer') !== (f.oldType === 'transfer'));
+  });
+  $('.tt-tr').hidden = !hasAccounts();
+  $('#cat-block').hidden = f.type === 'transfer';
+  renderFormAccounts();
+  if (f.type === 'transfer') {
+    $('#quick-amounts').innerHTML = QUICK.transfer.map(v => `<button type="button" class="chip" data-q="${v}">${rpShort(v)}</button>`).join('');
+    return;
+  }
   $('#tx-cats').innerHTML = sortedCats(f.type).map(c =>
     `<button type="button" class="cat ${c === f.cat ? 'active' : ''}" data-cat="${esc(c)}"><span class="e" aria-hidden="true">${iconOf(c)}</span>${esc(c)}</button>`).join('')
     || '<p class="muted small">Belum ada kategori. Tambahkan di sheet "Kategori".</p>';
@@ -663,8 +813,10 @@ function getAmount() { return Number(amountInput.value.replace(/\D/g, '')) || 0;
 
 function openForm(tx) {
   const f = state.form;
-  if (tx) Object.assign(f, { mode: 'edit', type: tx.type, cat: tx.category, date: tx.date, id: tx.id, oldType: tx.type });
-  else Object.assign(f, { mode: 'add', cat: '', date: today(), id: null, oldType: null });
+  if (tx) Object.assign(f, { mode: 'edit', type: tx.type, cat: tx.category || '', date: tx.date, id: tx.id, oldType: tx.type,
+    account: tx.type === 'transfer' ? tx.from : (tx.account || ''), toAccount: tx.to || '' });
+  else Object.assign(f, { mode: 'add', cat: '', date: today(), id: null, oldType: null,
+    account: defaultAccount(f.type === 'transfer' ? 'transfer' : f.type), toAccount: f.type === 'transfer' ? defaultAccount('transferTo') : '' });
   $('#tx-title').textContent = tx ? 'Edit Transaksi' : 'Tambah Transaksi';
   $('#tx-save .btn-label').textContent = tx ? 'Simpan perubahan' : 'Simpan';
   $('#tx-delete').hidden = !tx;
@@ -692,7 +844,7 @@ function closeForm(fromPop) {
 window.addEventListener('popstate', () => { if (!$('#confirm').hidden) closeConfirm(); closeForm(true); });
 
 function clearErrors() {
-  $('#err-amount').textContent = ''; $('#err-cat').textContent = '';
+  $('#err-amount').textContent = ''; $('#err-cat').textContent = ''; $('#err-acc').textContent = '';
   $('#amount-field').classList.remove('invalid');
 }
 
@@ -706,6 +858,12 @@ amountInput.addEventListener('input', () => {
 $('#tx-type').addEventListener('click', e => {
   const b = e.target.closest('.tt'); if (!b || b.dataset.v === state.form.type) return;
   state.form.type = b.dataset.v; state.form.cat = '';
+  if (state.form.mode === 'add') {
+    state.form.account = defaultAccount(b.dataset.v);
+    state.form.toAccount = b.dataset.v === 'transfer' ? defaultAccount('transferTo') : '';
+  } else if (!usableAccounts(b.dataset.v === 'pemasukan' ? 'in' : 'out').some(a => a.name === state.form.account)) {
+    state.form.account = defaultAccount(b.dataset.v);
+  }
   if (state.form.autoFilled) { setAmount(0); state.form.autoFilled = false; }
   $('#amount-hint').textContent = '';
   renderFormType();
@@ -730,6 +888,20 @@ $('#tx-cats').addEventListener('click', e => {
   $$('#tx-cats .cat').forEach(c => c.classList.toggle('active', c === b));
   $('#err-cat').textContent = '';
 });
+$('#tx-acc').addEventListener('click', e => {
+  const b = e.target.closest('[data-acc]'); if (!b) return;
+  const f = state.form;
+  f.account = b.dataset.acc;
+  if (f.toAccount === f.account) f.toAccount = '';
+  $('#err-acc').textContent = '';
+  renderFormAccounts();
+});
+$('#tx-acc-to').addEventListener('click', e => {
+  const b = e.target.closest('[data-acc]'); if (!b) return;
+  state.form.toAccount = b.dataset.acc;
+  $('#err-acc').textContent = '';
+  renderFormAccounts();
+});
 $('#quick-amounts').addEventListener('click', e => {
   const b = e.target.closest('[data-q]'); if (!b) return;
   setAmount(Number(b.dataset.q)); clearErrors();
@@ -749,27 +921,39 @@ $('#tx-form').addEventListener('submit', async e => {
     $('#err-amount').textContent = 'Nominal wajib diisi dan harus lebih dari 0.';
     $('#amount-field').classList.add('invalid'); ok = false;
   }
-  if (!f.cat) { $('#err-cat').textContent = 'Pilih salah satu kategori.'; ok = false; }
+  const isTr = f.type === 'transfer';
+  if (!isTr && !f.cat) { $('#err-cat').textContent = 'Pilih salah satu kategori.'; ok = false; }
+  if (hasAccounts()) {
+    // Transaksi lama tanpa rekening boleh disimpan tetap tanpa rekening (sudah tercakup di Saldo Awal)
+    if (!f.account && (f.mode === 'add' || isTr)) { $('#err-acc').textContent = 'Pilih rekening.'; ok = false; }
+    else if (isTr && !f.toAccount) { $('#err-acc').textContent = 'Pilih rekening tujuan.'; ok = false; }
+  }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(f.date)) { toast('Tanggal tidak valid.', 'err'); ok = false; }
   if (!ok) { if (navigator.vibrate) navigator.vibrate(30); return; }
 
-  const tx = { type: f.type, amount, category: f.cat, date: f.date, note: $('#tx-note').value.trim() };
+  const tx = isTr
+    ? { type: 'transfer', amount, date: f.date, note: $('#tx-note').value.trim(), from: f.account, to: f.toAccount }
+    : { type: f.type, amount, category: f.cat, date: f.date, note: $('#tx-note').value.trim(), account: hasAccounts() ? f.account : '' };
   setLoading(btn, true);
   try {
     if (f.mode === 'add') {
       const res = await api('add', { tx });
-      state.data[tx.type].push(Object.assign({ id: res.id, createdAt: res.createdAt }, tx));
+      listOf(tx.type).push(Object.assign({ id: res.id, createdAt: res.createdAt }, tx));
     } else {
       await api('update', { tx: Object.assign({ id: f.id, oldType: f.oldType }, tx) });
-      const old = state.data[f.oldType].find(t => t.id === f.id);
+      const old = listOf(f.oldType).find(t => t.id === f.id);
       const createdAt = old ? old.createdAt : Date.now();
-      state.data[f.oldType] = state.data[f.oldType].filter(t => t.id !== f.id);
-      state.data[tx.type].push(Object.assign({ id: f.id, createdAt }, tx));
+      state.data[f.oldType] = listOf(f.oldType).filter(t => t.id !== f.id);
+      listOf(tx.type).push(Object.assign({ id: f.id, createdAt }, tx));
     }
+    const lastAcc = store.get(LAST_ACC, {});
+    if (isTr) { lastAcc.transfer = tx.from; lastAcc.transferTo = tx.to; } else if (tx.account) lastAcc[tx.type] = tx.account;
+    store.set(LAST_ACC, lastAcc);
     persist();
     closeForm();
     renderAll();
-    toast(`${tx.type === 'pemasukan' ? 'Pemasukan' : 'Pengeluaran'} ${rp(amount)} ${f.mode === 'add' ? 'tersimpan' : 'diperbarui'} ✓`, 'ok');
+    const label = isTr ? 'Transfer' : tx.type === 'pemasukan' ? 'Pemasukan' : 'Pengeluaran';
+    toast(`${label} ${rp(amount)} ${f.mode === 'add' ? 'tersimpan' : 'diperbarui'} ✓`, 'ok');
   } catch (err) {
     toast('Gagal menyimpan: ' + err.message, 'err', { label: 'Coba lagi', fn: () => $('#tx-form').requestSubmit() });
   } finally {
@@ -779,15 +963,16 @@ $('#tx-form').addEventListener('submit', async e => {
 
 $('#tx-delete').addEventListener('click', () => {
   const f = state.form;
-  const t = state.data[f.oldType].find(x => x.id === f.id);
+  const t = listOf(f.oldType).find(x => x.id === f.id);
   if (!t) return;
+  const what = t.type === 'transfer' ? `Transfer ${t.from} → ${t.to}` : t.category;
   confirmDialog({
     title: 'Hapus transaksi?',
-    body: `${t.category} · ${rp(t.amount)} · ${fmtDate(t.date)}. Baris ini juga akan dihapus dari Google Sheets dan tidak bisa dibatalkan.`,
+    body: `${what} · ${rp(t.amount)} · ${fmtDate(t.date)}. Baris ini juga akan dihapus dari Google Sheets dan tidak bisa dibatalkan.`,
     yes: 'Ya, hapus',
     onYes: async () => {
       await api('delete', { id: t.id, type: t.type });
-      state.data[t.type] = state.data[t.type].filter(x => x.id !== t.id);
+      state.data[t.type] = listOf(t.type).filter(x => x.id !== t.id);
       persist(); closeForm(); renderAll();
       toast('Transaksi dihapus', 'ok');
     }
@@ -796,12 +981,13 @@ $('#tx-delete').addEventListener('click', () => {
 
 $('#tx-close').addEventListener('click', () => closeForm());
 $('#tx-overlay').addEventListener('click', () => closeForm());
-$('#fab').addEventListener('click', () => openForm());
+$('#fab').addEventListener('click', () => { if (state.form.type === 'transfer') state.form.type = 'pengeluaran'; openForm(); });
+$('#acc-transfer-btn').addEventListener('click', () => { state.form.type = 'transfer'; openForm(); });
 document.addEventListener('click', e => {
   if (e.target.closest('[data-open-form]')) { openForm(); return; }
   const row = e.target.closest('.tx[data-id]');
   if (row && state.data) {
-    const t = state.data[row.dataset.type].find(x => x.id === row.dataset.id);
+    const t = listOf(row.dataset.type).find(x => x.id === row.dataset.id);
     if (t) openForm(t);
   }
 });
@@ -863,10 +1049,12 @@ function go(view) {
   if (view === 'riwayat') { renderHistoryFilters(); renderHistory(); }
   if (view === 'analisis') renderAnalysis();
   if (view === 'setelan') renderSettings();
+  if (view === 'rekening') renderAccounts();
 }
 $$('.nav-btn').forEach(b => b.addEventListener('click', () => go(b.dataset.view)));
 document.addEventListener('click', e => { const g = e.target.closest('[data-goto]'); if (g) go(g.dataset.goto); });
 $('#refresh-btn').addEventListener('click', () => sync());
+$('#settings-btn').addEventListener('click', () => go('setelan'));
 
 function greet() {
   const h = new Date().getHours();
@@ -879,6 +1067,7 @@ function renderAll() {
   renderDashboard();
   if (state.view === 'riwayat') { renderHistoryFilters(); renderHistory(); }
   if (state.view === 'analisis') renderAnalysis();
+  if (state.view === 'rekening') renderAccounts();
   renderSettings();
 }
 

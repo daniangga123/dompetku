@@ -418,3 +418,65 @@ main { padding: 16px 18px calc(var(--nav-h) + 40px + var(--safe-b)); }
 .bar-note { margin: 5px 0 0; font-size: 11.5px; color: var(--muted); }
 .amount-hint { margin: 6px 2px 0; font-size: 12px; color: var(--accent); }
 .amount-hint:empty { display: none; }
+
+/* ---------- Rekening & transfer (v2.0) ---------- */
+.appbar-actions { display: flex; gap: 8px; }
+.type-toggle.three { grid-template-columns: repeat(3, 1fr); }
+.type-toggle.three .tt-thumb { width: calc((100% - 8px) / 3); }
+.type-toggle.three[data-v="transfer"] .tt-thumb { transform: translateX(200%); }
+.tt:disabled { opacity: .35; }
+.tt-tr.active::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; vertical-align: 1px; background: var(--accent); }
+.type-toggle.three .tt { font-size: 13.5px; }
+.segmented { grid-template-columns: repeat(4, 1fr); }
+.seg { font-size: 13px; }
+.tx-ico.tr { background: rgba(99,102,241,.10); }
+.tx-amt.tr { color: var(--ink-2); }
+
+.acc-row { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; padding: 2px 1px 4px; }
+.acc-row::-webkit-scrollbar { display: none; }
+.acc-chip {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 8px; text-align: left;
+  padding: 9px 12px; border-radius: 14px; background: var(--surface-2); border: 1.5px solid transparent;
+  transition: all .18s var(--ease); max-width: 210px;
+}
+.acc-chip:active { transform: scale(.97); }
+.acc-chip.active { background: #fff; border-color: var(--accent); box-shadow: 0 6px 16px -8px rgba(99,102,241,.6); }
+.ac-ico { font-size: 20px; }
+.ac-txt { display: flex; flex-direction: column; min-width: 0; }
+.ac-txt b { font-size: 12.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ac-txt small { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+.balance-strip {
+  width: 100%; display: flex; align-items: center; gap: 12px; text-align: left; margin-top: 12px;
+  padding: 12px 14px; border-radius: 18px; background: var(--surface); border: 1px solid var(--line);
+}
+.bs-ico { width: 40px; height: 40px; border-radius: 13px; display: grid; place-items: center; background: var(--grad-soft); font-size: 19px; flex: 0 0 auto; }
+.bs-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.bs-label { font-size: 12px; color: var(--ink-2); }
+.bs-val { font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.bs-sub { font-size: 11.5px; color: var(--muted); }
+.bs-go { font-size: 24px; color: var(--muted); }
+
+.acc-hero { background: linear-gradient(135deg, #0ea5e9 0%, #6366f1 60%, #8b5cf6 100%); }
+.dot-lock { background: #fde68a; }
+.acc-card {
+  display: block; width: 100%; text-align: left; margin-bottom: 10px; padding: 14px;
+  border-radius: 18px; background: var(--surface); border: 1px solid var(--line); transition: transform .15s var(--ease);
+}
+.acc-card:active { transform: scale(.985); }
+.acc-card.locked { background: repeating-linear-gradient(135deg, #fff, #fff 10px, #fafaf7 10px, #fafaf7 20px); }
+.acc-top { display: flex; align-items: center; gap: 12px; }
+.acc-badge { width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center; background: var(--grad-soft); font-size: 21px; flex: 0 0 auto; }
+.acc-id { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.acc-name { font-weight: 700; font-size: 14.5px; }
+.acc-note { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.acc-bal { font-weight: 800; font-size: 15px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.acc-bal.neg { color: var(--danger); }
+.acc-target { margin-top: 12px; }
+.acc-target span { display: block; margin-top: 6px; font-size: 12px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.acc-flow { display: block; margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.acc-flow b { color: var(--ink-2); font-weight: 600; }
+.acc-flow b.in { color: var(--in-ink); }
+.acc-help { margin: 14px 4px 0; line-height: 1.5; }
+.notice { padding: 12px 14px; margin-bottom: 12px; font-size: 13.5px; background: #fffbeb; border-color: #fde68a; }
+.notice-soft { font-size: 12.5px; color: var(--ink-2); background: var(--surface-2); padding: 10px 12px; border-radius: 12px; margin: 4px 0 0; }

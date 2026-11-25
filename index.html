@@ -52,9 +52,14 @@
         <p class="appbar-sub" id="appbar-sub">Halo 👋</p>
         <h1 class="appbar-title" id="appbar-title">Beranda</h1>
       </div>
-      <button class="icon-btn" id="refresh-btn" aria-label="Muat ulang data">
-        <svg viewBox="0 0 24 24" width="22" height="22"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v4h-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      </button>
+      <div class="appbar-actions">
+        <button class="icon-btn" id="refresh-btn" aria-label="Muat ulang data">
+          <svg viewBox="0 0 24 24" width="22" height="22"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v4h-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <button class="icon-btn" id="settings-btn" aria-label="Setelan">
+          <svg viewBox="0 0 24 24" width="22" height="22"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+        </button>
+      </div>
     </header>
 
     <main id="main">
@@ -80,6 +85,8 @@
           </div>
         </div>
 
+        <button class="balance-strip" id="balance-strip" data-goto="rekening" hidden></button>
+
         <div class="card income-card" id="income-card" hidden>
           <div class="chart-head"><h3>Rincian pemasukan</h3><p class="muted small">per sumber</p></div>
           <div id="income-list"></div>
@@ -103,10 +110,14 @@
         </div>
         <div class="segmented" id="h-type" role="tablist">
           <button class="seg active" data-v="semua">Semua</button>
-          <button class="seg" data-v="pemasukan">Pemasukan</button>
-          <button class="seg" data-v="pengeluaran">Pengeluaran</button>
+          <button class="seg" data-v="pemasukan">Masuk</button>
+          <button class="seg" data-v="pengeluaran">Keluar</button>
+          <button class="seg" data-v="transfer">Transfer</button>
         </div>
         <div class="filter-row">
+          <label class="pill-select">
+            <select id="h-acc"><option value="">Semua rekening</option></select>
+          </label>
           <label class="pill-select">
             <select id="h-cat"><option value="">Semua kategori</option></select>
           </label>
@@ -159,6 +170,27 @@
         </div>
       </section>
 
+      <!-- REKENING -->
+      <section class="view" id="view-rekening" data-title="Rekening">
+        <div id="acc-warning"></div>
+        <div class="hero-card acc-hero">
+          <p class="hero-label">Total saldo semua rekening</p>
+          <p class="hero-value" id="acc-total">Rp 0</p>
+          <p class="hero-range" id="acc-count"></p>
+          <div class="hero-split">
+            <div><span class="dot dot-in"></span><p class="mini-label">Bisa dipakai</p><p class="mini-value" id="acc-free">Rp 0</p></div>
+            <div><span class="dot dot-lock"></span><p class="mini-label">🔒 Terkunci</p><p class="mini-value" id="acc-locked">Rp 0</p></div>
+          </div>
+        </div>
+        <div class="section-head">
+          <h2 class="section-title">Daftar rekening</h2>
+          <button class="link-btn" id="acc-transfer-btn">+ Transfer</button>
+        </div>
+        <div id="acc-list"></div>
+        <p class="notice-soft" id="acc-orphan" hidden></p>
+        <p class="muted small acc-help">Saldo = Saldo Awal di sheet <b>Rekening</b> + semua pemasukan, pengeluaran, dan transfer yang dicatat. Untuk menambah rekening, mengubah saldo awal, target, atau status terkunci, edit sheet Rekening lalu ketuk ↻. Ketuk sebuah rekening untuk melihat riwayatnya.</p>
+      </section>
+
       <!-- SETELAN -->
       <section class="view" id="view-setelan" data-title="Setelan">
         <div class="card settings-card">
@@ -181,7 +213,7 @@
           <p class="muted small">Kunci rahasia hanya tersimpan di HP ini. Jika HP hilang, jalankan fungsi <b>gantiKunci</b> di Apps Script agar kunci lama tidak berlaku.</p>
           <button class="btn btn-danger-ghost" id="set-logout">Putuskan koneksi dari HP ini</button>
         </div>
-        <p class="version muted small">DompetKu v1.1</p>
+        <p class="version muted small">DompetKu v2.0</p>
       </section>
     </main>
 
@@ -204,9 +236,9 @@
         <svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
         <span>Analisis</span>
       </button>
-      <button class="nav-btn" data-view="setelan">
-        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
-        <span>Setelan</span>
+      <button class="nav-btn" data-view="rekening">
+        <svg viewBox="0 0 24 24"><path d="M3 9.5 12 4l9 5.5M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span>Rekening</span>
       </button>
     </nav>
   </div>
@@ -225,6 +257,7 @@
       <div class="type-toggle" id="tx-type">
         <button type="button" class="tt tt-out active" data-v="pengeluaran">Pengeluaran</button>
         <button type="button" class="tt tt-in" data-v="pemasukan">Pemasukan</button>
+        <button type="button" class="tt tt-tr" data-v="transfer" hidden>Transfer</button>
         <span class="tt-thumb"></span>
       </div>
 
@@ -236,9 +269,21 @@
       <p class="amount-hint" id="amount-hint"></p>
       <div class="quick-amounts" id="quick-amounts"></div>
 
-      <p class="field-label">Kategori</p>
-      <div class="cat-grid" id="tx-cats"></div>
-      <p class="form-error" id="err-cat"></p>
+      <div id="cat-block">
+        <p class="field-label">Kategori</p>
+        <div class="cat-grid" id="tx-cats"></div>
+        <p class="form-error" id="err-cat"></p>
+      </div>
+
+      <div id="acc-block" hidden>
+        <p class="field-label" id="acc-label">Rekening</p>
+        <div class="acc-row" id="tx-acc"></div>
+        <div id="acc-to-wrap" hidden>
+          <p class="field-label">Ke rekening</p>
+          <div class="acc-row" id="tx-acc-to"></div>
+        </div>
+        <p class="form-error" id="err-acc"></p>
+      </div>
 
       <p class="field-label">Tanggal</p>
       <div class="date-row">
